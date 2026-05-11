@@ -5,7 +5,9 @@ set -o pipefail
 
 PHILO_BIN="${1:-./philo/philo}"
 PHILO_DIR="$(dirname "$PHILO_BIN")"
-LOG_DIR="${LOG_DIR:-./philo_test_logs/$(date +%Y%m%d_%H%M%S)}"
+LOG_DIR="${LOG_DIR:-./philo_test_logs}"
+LOG_FILE="${LOG_FILE:-${LOG_DIR}/test_run_$(date +%Y%m%d_%H%M%S).log}"
+TMP_DIR="${TMPDIR:-/tmp}/philo_test_$$"
 
 PASS=0
 FAIL=0
@@ -14,6 +16,9 @@ SKIP=0
 TIMEOUT_BIN=""
 
 mkdir -p "$LOG_DIR"
+mkdir -p "$TMP_DIR"
+: >"$LOG_FILE"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 green() { printf "\033[32m%s\033[0m\n" "$1"; }
 red()   { printf "\033[31m%s\033[0m\n" "$1"; }
@@ -64,6 +69,38 @@ safe_name() {
 RUN_OUT=""
 RUN_STATUS=0
 
+append_case_log() {
+    local name="$1"
+    shift
+
+    {
+        printf "\n== CASE: %s ==\n" "$name"
+        printf "Command:"
+        printf " %q" "$PHILO_BIN"
+        while [[ $# -gt 0 ]]; do
+            printf " %q" "$1"
+            shift
+        done
+        printf "\nStatus: %s\n" "$RUN_STATUS"
+        printf -- "-- output --\n"
+        if [[ -s "$RUN_OUT" ]]; then
+            cat "$RUN_OUT"
+        else
+            printf "(no output)\n"
+        fi
+    } >>"$LOG_FILE"
+}
+
+log_check_failure() {
+    local label="$1"
+    shift
+
+    {
+        printf "\n== CHECK FAILED: %s ==\n" "$label"
+        "$@"
+    } >>"$LOG_FILE" 2>&1
+}
+
 run_case() {
     local name="$1"
     local limit="$2"
@@ -71,14 +108,15 @@ run_case() {
 
     local file_name
     file_name="$(safe_name "$name")"
-    RUN_OUT="${LOG_DIR}/${file_name}.log"
+    RUN_OUT="${TMP_DIR}/${file_name}.log"
 
     "$TIMEOUT_BIN" "$limit" "$PHILO_BIN" "$@" >"$RUN_OUT" 2>&1
     RUN_STATUS=$?
+    append_case_log "$name" "$@"
 }
 
 compile_project() {
-    local out="${LOG_DIR}/make.log"
+    local out="${TMP_DIR}/make.log"
 
     if [[ -x "$PHILO_BIN" ]]; then
         pass "binary exists: $PHILO_BIN"
@@ -93,8 +131,14 @@ compile_project() {
     make -C "$PHILO_DIR" >"$out" 2>&1
     local st=$?
 
+    {
+        printf "\n== MAKE ==\n"
+        cat "$out"
+        printf "Status: %s\n" "$st"
+    } >>"$LOG_FILE"
+
     if [[ $st -ne 0 ]]; then
-        fail "make failed. See $out"
+        fail "make failed"
         return 1
     fi
 
@@ -191,6 +235,34 @@ check_no_eating() {
 
     if grep -q ' is eating$' "$out"; then
         grep ' is eating$' "$out"
+        return 1
+    fi
+
+    return 0
+}
+
+check_no_runtime_output() {
+    local out="$1"
+
+    if grep -Eq '^[0-9]+ [0-9]+ (has taken a fork|is eating|is sleeping|is thinking|died)$' "$out"; then
+        grep -En '^[0-9]+ [0-9]+ (has taken a fork|is eating|is sleeping|is thinking|died)$' "$out"
+        return 1
+    fi
+
+    return 0
+}
+
+check_error_message() {
+    local name="$1"
+    local out="$2"
+
+    if [[ ! -s "$out" ]]; then
+        printf "No error message printed for invalid args: %s\n" "$name"
+        return 1
+    fi
+
+    if ! grep -Eiq 'error|invalid|usage|argument|number|positive|integer' "$out"; then
+        printf "Output does not look like an error message for invalid args: %s\n" "$name"
         return 1
     fi
 
@@ -294,7 +366,7 @@ warn_if_timestamps_decrease() {
     ' "$out" >/dev/null 2>&1
 
     if [[ $? -ne 0 ]]; then
-        yellow "⚠️  Warning: timestamps decrease somewhere in $out"
+        yellow "⚠️  Warning: timestamps decrease somewhere"
     fi
 }
 
@@ -303,18 +375,21 @@ common_valid_checks() {
     local out="$2"
     local n="$3"
 
-    if ! check_log_format "$out" "$n" >"${out}.format.err" 2>&1; then
-        fail "$name: bad log format. See ${out}.format.err and $out"
+    if ! check_log_format "$out" "$n" >/dev/null 2>&1; then
+        log_check_failure "$name: bad log format" check_log_format "$out" "$n"
+        fail "$name: bad log format"
         return 1
     fi
 
-    if ! check_no_output_after_death "$out" >"${out}.after_death.err" 2>&1; then
-        fail "$name: output after death or multiple deaths. See ${out}.after_death.err and $out"
+    if ! check_no_output_after_death "$out" >/dev/null 2>&1; then
+        log_check_failure "$name: output after death or multiple deaths" check_no_output_after_death "$out"
+        fail "$name: output after death or multiple deaths"
         return 1
     fi
 
-    if ! check_two_forks_before_eating "$out" >"${out}.forks.err" 2>&1; then
-        fail "$name: philosopher ate without 2 fork logs. See ${out}.forks.err and $out"
+    if ! check_two_forks_before_eating "$out" >/dev/null 2>&1; then
+        log_check_failure "$name: philosopher ate without 2 fork logs" check_two_forks_before_eating "$out"
+        fail "$name: philosopher ate without 2 fork logs"
         return 1
     fi
 
@@ -329,17 +404,29 @@ expect_invalid() {
     run_case "invalid_${name}" "1s" "$@"
 
     if [[ $RUN_STATUS -eq 124 ]]; then
-        fail "invalid args: $name: program did not exit. See $RUN_OUT"
+        fail "invalid args: $name: program did not exit"
         return 1
     fi
 
     if is_crash_status "$RUN_STATUS"; then
-        fail "invalid args: $name: program crashed with status $RUN_STATUS. See $RUN_OUT"
+        fail "invalid args: $name: program crashed with status $RUN_STATUS"
         return 1
     fi
 
     if [[ $RUN_STATUS -eq 0 ]]; then
-        fail "invalid args: $name: expected non-zero exit status. See $RUN_OUT"
+        fail "invalid args: $name: expected non-zero exit status"
+        return 1
+    fi
+
+    if ! check_no_runtime_output "$RUN_OUT" >/dev/null 2>&1; then
+        log_check_failure "invalid args: $name: program appears to have started simulation" check_no_runtime_output "$RUN_OUT"
+        fail "invalid args: $name: program appears to have started simulation"
+        return 1
+    fi
+
+    if ! check_error_message "$name" "$RUN_OUT" >/dev/null 2>&1; then
+        log_check_failure "invalid args: $name: missing or unclear error message" check_error_message "$name" "$RUN_OUT"
+        fail "invalid args: $name: missing or unclear error message"
         return 1
     fi
 
@@ -355,12 +442,12 @@ test_single_philosopher() {
     run_case "$name" "1s" 1 "$time_to_die" 100 100
 
     if [[ $RUN_STATUS -eq 124 ]]; then
-        fail "$name: timeout. See $RUN_OUT"
+        fail "$name: timeout"
         return 1
     fi
 
     if is_crash_status "$RUN_STATUS"; then
-        fail "$name: crashed with status $RUN_STATUS. See $RUN_OUT"
+        fail "$name: crashed with status $RUN_STATUS"
         return 1
     fi
 
@@ -368,18 +455,21 @@ test_single_philosopher() {
         return 1
     fi
 
-    if ! check_death_once "$RUN_OUT" >"${RUN_OUT}.death.err" 2>&1; then
-        fail "$name: expected exactly one death. See ${RUN_OUT}.death.err and $RUN_OUT"
+    if ! check_death_once "$RUN_OUT" >/dev/null 2>&1; then
+        log_check_failure "$name: expected exactly one death" check_death_once "$RUN_OUT"
+        fail "$name: expected exactly one death"
         return 1
     fi
 
-    if ! check_no_eating "$RUN_OUT" >"${RUN_OUT}.eating.err" 2>&1; then
-        fail "$name: one philosopher must not eat. See ${RUN_OUT}.eating.err and $RUN_OUT"
+    if ! check_no_eating "$RUN_OUT" >/dev/null 2>&1; then
+        log_check_failure "$name: one philosopher must not eat" check_no_eating "$RUN_OUT"
+        fail "$name: one philosopher must not eat"
         return 1
     fi
 
-    if ! check_single_philo_death_time "$RUN_OUT" "$time_to_die" >"${RUN_OUT}.death_time.err" 2>&1; then
-        fail "$name: death time is wrong. See ${RUN_OUT}.death_time.err and $RUN_OUT"
+    if ! check_single_philo_death_time "$RUN_OUT" "$time_to_die" >/dev/null 2>&1; then
+        log_check_failure "$name: death time is wrong" check_single_philo_death_time "$RUN_OUT" "$time_to_die"
+        fail "$name: death time is wrong"
         return 1
     fi
 
@@ -397,12 +487,12 @@ test_no_death_with_must_eat() {
     run_case "$name" "$limit" "$@"
 
     if [[ $RUN_STATUS -eq 124 ]]; then
-        fail "$name: timeout; probably did not stop after must_eat. See $RUN_OUT"
+        fail "$name: timeout; probably did not stop after must_eat"
         return 1
     fi
 
     if is_crash_status "$RUN_STATUS"; then
-        fail "$name: crashed with status $RUN_STATUS. See $RUN_OUT"
+        fail "$name: crashed with status $RUN_STATUS"
         return 1
     fi
 
@@ -410,13 +500,15 @@ test_no_death_with_must_eat() {
         return 1
     fi
 
-    if ! check_no_death "$RUN_OUT" >"${RUN_OUT}.death.err" 2>&1; then
-        fail "$name: unexpected death. See ${RUN_OUT}.death.err and $RUN_OUT"
+    if ! check_no_death "$RUN_OUT" >/dev/null 2>&1; then
+        log_check_failure "$name: unexpected death" check_no_death "$RUN_OUT"
+        fail "$name: unexpected death"
         return 1
     fi
 
-    if ! check_min_eats "$RUN_OUT" "$n" "$must_eat" >"${RUN_OUT}.eats.err" 2>&1; then
-        fail "$name: not all philosophers ate enough. See ${RUN_OUT}.eats.err and $RUN_OUT"
+    if ! check_min_eats "$RUN_OUT" "$n" "$must_eat" >/dev/null 2>&1; then
+        log_check_failure "$name: not all philosophers ate enough" check_min_eats "$RUN_OUT" "$n" "$must_eat"
+        fail "$name: not all philosophers ate enough"
         return 1
     fi
 
@@ -433,12 +525,12 @@ test_expected_death() {
     run_case "$name" "$limit" "$@"
 
     if [[ $RUN_STATUS -eq 124 ]]; then
-        fail "$name: timeout; program did not stop after death. See $RUN_OUT"
+        fail "$name: timeout; program did not stop after death"
         return 1
     fi
 
     if is_crash_status "$RUN_STATUS"; then
-        fail "$name: crashed with status $RUN_STATUS. See $RUN_OUT"
+        fail "$name: crashed with status $RUN_STATUS"
         return 1
     fi
 
@@ -446,8 +538,9 @@ test_expected_death() {
         return 1
     fi
 
-    if ! check_death_once "$RUN_OUT" >"${RUN_OUT}.death.err" 2>&1; then
-        fail "$name: expected exactly one death. See ${RUN_OUT}.death.err and $RUN_OUT"
+    if ! check_death_once "$RUN_OUT" >/dev/null 2>&1; then
+        log_check_failure "$name: expected exactly one death" check_death_once "$RUN_OUT"
+        fail "$name: expected exactly one death"
         return 1
     fi
 
@@ -466,7 +559,7 @@ run_helgrind() {
         return 0
     fi
 
-    local out="${LOG_DIR}/helgrind.log"
+    local out="${TMP_DIR}/helgrind.log"
 
     "$TIMEOUT_BIN" "30s" valgrind \
         --tool=helgrind \
@@ -475,13 +568,19 @@ run_helgrind() {
 
     local st=$?
 
+    {
+        printf "\n== HELGRIND ==\n"
+        cat "$out"
+        printf "Status: %s\n" "$st"
+    } >>"$LOG_FILE"
+
     if [[ $st -eq 124 ]]; then
-        fail "Helgrind: timeout. See $out"
+        fail "Helgrind: timeout"
         return 1
     fi
 
     if [[ $st -ne 0 ]]; then
-        fail "Helgrind: possible data race or threading issue. See $out"
+        fail "Helgrind: possible data race or threading issue"
         return 1
     fi
 
@@ -500,7 +599,7 @@ run_memcheck() {
         return 0
     fi
 
-    local out="${LOG_DIR}/memcheck.log"
+    local out="${TMP_DIR}/memcheck.log"
 
     "$TIMEOUT_BIN" "30s" valgrind \
         --leak-check=full \
@@ -511,13 +610,19 @@ run_memcheck() {
 
     local st=$?
 
+    {
+        printf "\n== MEMCHECK ==\n"
+        cat "$out"
+        printf "Status: %s\n" "$st"
+    } >>"$LOG_FILE"
+
     if [[ $st -eq 124 ]]; then
-        fail "Memcheck: timeout. See $out"
+        fail "Memcheck: timeout"
         return 1
     fi
 
     if [[ $st -ne 0 ]]; then
-        fail "Memcheck: leak or memory error detected. See $out"
+        fail "Memcheck: leak or memory error detected"
         return 1
     fi
 
@@ -527,7 +632,7 @@ run_memcheck() {
 
 main() {
     echo "Testing binary: $PHILO_BIN"
-    echo "Logs: $LOG_DIR"
+    echo "Logs: $LOG_FILE"
     echo
 
     find_timeout || exit 1
@@ -537,16 +642,43 @@ main() {
     echo "== Invalid argument tests =="
 
     expect_invalid "no_args"
+    expect_invalid "only_philosophers" 5
+    expect_invalid "missing_time_to_eat" 5 800
+    expect_invalid "missing_time_to_sleep" 5 800 200
     expect_invalid "too_few_args" 5 800 200
     expect_invalid "too_many_args" 5 800 200 200 3 99
-    expect_invalid "non_numeric" 5 abc 200 200
-    expect_invalid "negative_value" 5 -800 200 200
+    expect_invalid "non_numeric_philosophers" abc 800 200 200
+    expect_invalid "non_numeric_time_to_die" 5 abc 200 200
+    expect_invalid "non_numeric_time_to_eat" 5 800 abc 200
+    expect_invalid "non_numeric_time_to_sleep" 5 800 200 abc
+    expect_invalid "non_numeric_must_eat" 5 800 200 200 abc
+    expect_invalid "mixed_numeric_time_to_die" 5 80a 200 200
+    expect_invalid "mixed_numeric_suffix" 5 800 200 200 3x
+    expect_invalid "mixed_numeric_prefix" 5 x3 200 200
+    expect_invalid "decimal_value" 5 800.5 200 200
+    expect_invalid "empty_argument" 5 "" 200 200
+    expect_invalid "spaces_only_argument" 5 "   " 200 200
+    expect_invalid "leading_space_argument" 5 " 800" 200 200
+    expect_invalid "trailing_space_argument" 5 "800 " 200 200
+    expect_invalid "plus_sign_only" 5 + 200 200
+    expect_invalid "minus_sign_only" 5 - 200 200
+    expect_invalid "negative_philosophers" -5 800 200 200
+    expect_invalid "negative_time_to_die" 5 -800 200 200
+    expect_invalid "negative_time_to_eat" 5 800 -200 200
+    expect_invalid "negative_time_to_sleep" 5 800 200 -200
+    expect_invalid "negative_must_eat" 5 800 200 200 -3
     expect_invalid "zero_philosophers" 0 800 200 200
     expect_invalid "zero_time_to_die" 5 0 200 200
     expect_invalid "zero_time_to_eat" 5 800 0 200
     expect_invalid "zero_time_to_sleep" 5 800 200 0
     expect_invalid "zero_must_eat" 5 800 200 200 0
-    expect_invalid "int_overflow" 2147483648 800 200 200
+    expect_invalid "overflow_philosophers" 2147483648 800 200 200
+    expect_invalid "overflow_time_to_die" 5 2147483648 200 200
+    expect_invalid "overflow_time_to_eat" 5 800 2147483648 200
+    expect_invalid "overflow_time_to_sleep" 5 800 200 2147483648
+    expect_invalid "overflow_must_eat" 5 800 200 200 2147483648
+    expect_invalid "long_overflow" 999999999999999999999999 800 200 200
+    expect_invalid "int_max_philosophers_unreasonable" 2147483647 800 200 200
 
     echo
     echo "== Functional mandatory tests =="
@@ -610,7 +742,7 @@ main() {
     echo "Passed:  $PASS"
     echo "Failed:  $FAIL"
     echo "Skipped: $SKIP"
-    echo "Logs:    $LOG_DIR"
+    echo "Logs:    $LOG_FILE"
 
     if [[ $FAIL -ne 0 ]]; then
         exit 1
