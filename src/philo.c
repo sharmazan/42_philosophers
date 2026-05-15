@@ -7,6 +7,7 @@
 #define ITERATIONS 1000000
 
 int counter = 0;
+pthread_mutex_t counter_lock;
 
 typedef struct s_task  {
     int id;
@@ -33,8 +34,11 @@ void *worker(void *arg) {
 void *counter_worker(void *arg) {
     (void)arg;
     int i=0;
-    while (i++ < ITERATIONS)
+    while (i++ < ITERATIONS) {
+        pthread_mutex_lock(&counter_lock);
         counter++;
+        pthread_mutex_unlock(&counter_lock);
+    }
     return NULL;
 }
 
@@ -47,6 +51,7 @@ int main(int ac, char **av) {
     }
 
     pthread_t thread[THREADS];
+    pthread_mutex_init(&counter_lock, NULL);
     int ids[THREADS];
     int i = 0;
     struct s_task task;
@@ -68,6 +73,8 @@ int main(int ac, char **av) {
     // sleep(2);
     printf("Expected: %d\n", THREADS * ITERATIONS);
     printf("Actual: %d\n", counter);
+
+    pthread_mutex_destroy(&counter_lock);
     printf("Program finished\n");
 
     return 0;
