@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+#define THREADS 5
+
 void print_err(char *s) {
     while (s && *s)
         write(2, s++, 1);
@@ -13,6 +15,8 @@ void *worker(void *arg) {
     int id = *(int *)arg;
 
     printf("Hello from thread %d\n", id);
+    sleep(1);
+    printf("Bye from thread %d\n", id);
     return NULL;
 }
 
@@ -24,18 +28,24 @@ int main(int ac, char **av) {
         return 1;
     }
 
-    pthread_t thread[5];
-    int id = 0;
-    while (id < 5) {
-        pthread_create(&thread[id], NULL, worker, &id);
-        id++;
+    pthread_t thread[THREADS];
+    int ids[THREADS];
+    int i = 0;
+
+    printf("Program started\n");
+    for (i = 0; i < THREADS; i++) {
+        ids[i] = i;
+        pthread_create(&thread[i], NULL, worker, &ids[i]);
     }
 
-    id = 0;
-    while (id < 5) {
-        pthread_join(thread[id], NULL);
-        id++;
+    i = 0;
+    while (i < THREADS) {
+        pthread_join(thread[i], NULL);
+        // pthread_detach(thread[id]);
+        i++;
     }
+    // sleep(2);
+    printf("Program finished\n");
 
     return 0;
 }
