@@ -1,19 +1,39 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/time.h>
 
-#define THREADS 4
-#define ITERATIONS 1000000
+typedef struct s_config {
+    int philo_num;
+    long last_meal;
+    long time_to_die;
+    long time_to_eat;
+    long time_to_sleep;
+    int must_eat_count;
+} t_config;
 
-int counter = 0;
-pthread_mutex_t counter_lock;
-pthread_mutex_t print_lock;
+typedef struct s_sim t_sim;
 
-typedef struct s_task  {
+typedef struct s_philo  {
     int id;
-    char *message;
-} t_task;
+    pthread_t thread;
+    pthread_mutex_t *left_fork;
+    pthread_mutex_t *right_fork;
+    int meals_eaten;
+    pthread_mutex_t *meals_mutex;
+
+    t_sim *sim;
+} t_philo;
+
+typedef struct s_sim {
+    t_config config;
+    t_philo *philos;
+    pthread_mutex_t *forks;
+    pthread_mutex_t print_mutex;
+    pthread_mutex_t stop_mutex;
+    long start_time;
+} t_sim;
 
 void print_err(char *s) {
     while (s && *s)
@@ -28,72 +48,71 @@ void print_string(char *s) {
 }
 
 void *worker(void *arg) {
-    // t_task *task;
+    t_philo *philo;
 
-    // task = (t_task *)arg;
-    (void)arg;
-    pthread_mutex_lock(&print_lock);
-    print_string("thread %d started");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d do some work");
-    print_string("thread %d finished");
-    pthread_mutex_unlock(&print_lock);
-
-    return NULL;
-}
-
-void *counter_worker(void *arg) {
-    (void)arg;
-    int i=0;
-    while (i++ < ITERATIONS) {
-        pthread_mutex_lock(&counter_lock);
-        counter++;
-        pthread_mutex_unlock(&counter_lock);
+    philo = (t_philo *)arg;
+    while (1) {
+        printf("%d eating\n", philo->id);
+        usleep(philo->sim->config.time_to_eat * 1000L);
+        philo->meals_eaten++;
+        printf("%d sleeping\n", philo->id);
+        usleep(philo->sim->config.time_to_sleep * 1000L);
+        printf("%d thinking\n", philo->id);
+        // usleep(philo->sim->config.time_to_think * 1000L);
+        usleep(1000);
+        if (philo->sim->config.must_eat_count && philo->meals_eaten == philo->sim->config.must_eat_count) {
+            printf("thread %d finished\n", philo->id);
+            return NULL;
+        }
     }
-    return NULL;
 }
+
+void malloc_philo_and_forks(t_sim *sim) {
+    sim->philos = malloc(sizeof(t_philo) * sim->config.philo_num);
+    sim->forks = malloc(sizeof(pthread_mutex_t) * sim->config.philo_num);
+}
+
+void cleanup(t_sim sim) {
+    free(sim.philos);
+    free(sim.forks);
+}
+
 
 int main(int ac, char **av) {
-    printf("Arguments amount: %d\n", ac);
-    (void)av;
+    t_sim sim;
+    int i;
+
     if (ac < 5 || ac > 6) {
         print_err("Wrong arguments. Use it with:\n./philo number_of_philosophers time_to_die time_to_eat time_to_sleep [number_of_times_each_philosopher_must_eat]");
         return 1;
     }
 
-    pthread_t thread[THREADS];
-    pthread_mutex_init(&counter_lock, NULL);
-    int ids[THREADS];
-    int i = 0;
-    // struct s_task task;
-    // task.id = 1;
-    // task.message = "Just hi";
+    sim.config.philo_num = atoi(av[1]);
+    sim.config.time_to_die = atoi(av[2]);
+    sim.config.time_to_eat = atoi(av[3]);
+    sim.config.time_to_sleep = atoi(av[4]);
+    if (ac == 6)
+        sim.config.must_eat_count = atoi(av[5]);
+    else
+        sim.config.must_eat_count = 0;
 
+    malloc_philo_and_forks(&sim);
     printf("Program started\n");
-    for (i = 0; i < THREADS; i++) {
-        ids[i] = i;
-        pthread_create(&thread[i], NULL, worker, &ids[i]);
+    i = 0;
+    while (i < sim.config.philo_num) {
+        sim.philos[i].id = i;
+        sim.philos[i].meals_eaten = 0;
+        sim.philos[i].sim = &sim;
+        pthread_create(&sim.philos[i].thread, NULL, worker, &sim.philos[i]);
+        i++;
     }
 
     i = 0;
-    while (i < THREADS) {
-        pthread_join(thread[i], NULL);
-        // pthread_detach(thread[id]);
+    while (i < sim.config.philo_num) {
+        pthread_join(sim.philos[i].thread, NULL);
         i++;
     }
-    // sleep(2);
-    // printf("Expected: %d\n", THREADS * ITERATIONS);
-    // printf("Actual: %d\n", counter);
-
-    pthread_mutex_destroy(&counter_lock);
+    cleanup(sim);
     printf("Program finished\n");
-
     return 0;
 }

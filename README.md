@@ -5,6 +5,9 @@ TODO
 - handle one philo case
 - implement data structures
 - main algo
+- add a Makefile
+- fix the norm
+- verify with valgrind and static code analyzer
 - remove the tester
 
 ## Description
