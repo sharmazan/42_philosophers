@@ -4,6 +4,9 @@
 #include <sys/time.h>
 
 #define THREADS 4
+#define ITERATIONS 1000000
+
+int counter = 0;
 
 typedef struct s_task  {
     int id;
@@ -27,6 +30,14 @@ void *worker(void *arg) {
     return NULL;
 }
 
+void *counter_worker(void *arg) {
+    (void)arg;
+    int i=0;
+    while (i++ < ITERATIONS)
+        counter++;
+    return NULL;
+}
+
 int main(int ac, char **av) {
     printf("Arguments amount: %d\n", ac);
     (void)av;
@@ -45,7 +56,7 @@ int main(int ac, char **av) {
     printf("Program started\n");
     (void)ids;
     for (i = 0; i < THREADS; i++) {
-        pthread_create(&thread[i], NULL, worker, &task);
+        pthread_create(&thread[i], NULL, counter_worker, &task);
     }
 
     i = 0;
@@ -55,6 +66,8 @@ int main(int ac, char **av) {
         i++;
     }
     // sleep(2);
+    printf("Expected: %d\n", THREADS * ITERATIONS);
+    printf("Actual: %d\n", counter);
     printf("Program finished\n");
 
     return 0;
