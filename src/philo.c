@@ -3,7 +3,12 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-#define THREADS 5
+#define THREADS 4
+
+typedef struct s_task  {
+    int id;
+    char *message;
+} t_task;
 
 void print_err(char *s) {
     while (s && *s)
@@ -12,11 +17,13 @@ void print_err(char *s) {
 }
 
 void *worker(void *arg) {
-    int id = *(int *)arg;
+    t_task *task;
 
-    printf("Hello from thread %d\n", id);
+    task = (t_task *)arg;
+    printf("Hello from thread %d\n", task->id);
     sleep(1);
-    printf("Bye from thread %d\n", id);
+    printf("thread %d message: %s\n", task->id, task->message);
+    printf("Bye from thread %d\n", task->id);
     return NULL;
 }
 
@@ -31,11 +38,14 @@ int main(int ac, char **av) {
     pthread_t thread[THREADS];
     int ids[THREADS];
     int i = 0;
+    struct s_task task;
+    task.id = 1;
+    task.message = "Just hi";
 
     printf("Program started\n");
+    (void)ids;
     for (i = 0; i < THREADS; i++) {
-        ids[i] = i;
-        pthread_create(&thread[i], NULL, worker, &ids[i]);
+        pthread_create(&thread[i], NULL, worker, &task);
     }
 
     i = 0;
