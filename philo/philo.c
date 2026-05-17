@@ -47,6 +47,27 @@ void print_string(char *s) {
     write(1, "\n", 1);
 }
 
+long get_time_ms(void) {
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000L) + (tv.tv_usec / 1000L);
+}
+
+void log_with_timestamp(int x, char *s, long starttime) {
+    long now;
+    static long start;
+
+    if (starttime) {
+        start = get_time_ms();
+        printf("log_with_timestamp inited\n");
+        return;
+    }
+
+    now = get_time_ms();
+    printf("%ld: %d %s\n", now - start, x, s);
+}
+
 void *worker(void *arg) {
     t_philo *philo;
 
@@ -55,7 +76,7 @@ void *worker(void *arg) {
         printf("%d eating\n", philo->id);
         usleep(philo->sim->config.time_to_eat * 1000L);
         philo->meals_eaten++;
-        printf("%d sleeping\n", philo->id);
+        log_with_timestamp(philo->id, "is sleeping", 0);
         usleep(philo->sim->config.time_to_sleep * 1000L);
         printf("%d thinking\n", philo->id);
         // usleep(philo->sim->config.time_to_think * 1000L);
@@ -87,6 +108,7 @@ int main(int ac, char **av) {
         return 1;
     }
 
+    log_with_timestamp(0, "", 1);
     sim.config.philo_num = atoi(av[1]);
     sim.config.time_to_die = atoi(av[2]);
     sim.config.time_to_eat = atoi(av[3]);
