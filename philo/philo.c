@@ -33,6 +33,7 @@ typedef struct s_sim {
     pthread_mutex_t print_mutex;
     pthread_mutex_t stop_mutex;
     long start_time;
+    int should_stop;
 } t_sim;
 
 void print_err(char *s) {
@@ -54,18 +55,11 @@ long get_time_ms(void) {
     return (tv.tv_sec * 1000L) + (tv.tv_usec / 1000L);
 }
 
-void log_with_timestamp(int x, char *s, long starttime) {
+void log_with_timestamp(t_sim *sim, int x, char *s) {
     long now;
-    static long start;
-
-    if (starttime) {
-        start = get_time_ms();
-        printf("log_with_timestamp inited\n");
-        return;
-    }
 
     now = get_time_ms();
-    printf("%ld: %d %s\n", now - start, x, s);
+    printf("%ld: %d %s\n", now - sim->start_time, x, s);
 }
 
 void *worker(void *arg) {
@@ -76,9 +70,9 @@ void *worker(void *arg) {
         printf("%d eating\n", philo->id);
         usleep(philo->sim->config.time_to_eat * 1000L);
         philo->meals_eaten++;
-        log_with_timestamp(philo->id, "is sleeping", 0);
+        log_with_timestamp(philo->sim, philo->id, "is sleeping");
         usleep(philo->sim->config.time_to_sleep * 1000L);
-        printf("%d thinking\n", philo->id);
+        log_with_timestamp(philo->sim, philo->id, "is thinking");
         // usleep(philo->sim->config.time_to_think * 1000L);
         usleep(1000);
         if (philo->sim->config.must_eat_count && philo->meals_eaten == philo->sim->config.must_eat_count) {
@@ -96,6 +90,8 @@ void malloc_philo_and_forks(t_sim *sim) {
 void cleanup(t_sim sim) {
     free(sim.philos);
     free(sim.forks);
+    pthread_mutex_destroy(&sim.print_mutex);
+    pthread_mutex_destroy(&sim.stop_mutex);
 }
 
 
@@ -108,7 +104,7 @@ int main(int ac, char **av) {
         return 1;
     }
 
-    log_with_timestamp(0, "", 1);
+    // setup
     sim.config.philo_num = atoi(av[1]);
     sim.config.time_to_die = atoi(av[2]);
     sim.config.time_to_eat = atoi(av[3]);
@@ -118,6 +114,10 @@ int main(int ac, char **av) {
     else
         sim.config.must_eat_count = 0;
 
+    pthread_mutex_init(&sim.print_mutex, NULL);
+    pthread_mutex_init(&sim.stop_mutex, NULL);
+    sim.start_time = get_time_ms();
+    sim.should_stop = 0;
     malloc_philo_and_forks(&sim);
     printf("Program started\n");
     i = 0;
