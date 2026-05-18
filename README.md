@@ -2,10 +2,15 @@
 
 TODO
 - arg verification
-- handle one philo case
+- negative or wrong arguments
 - implement data structures
-- main algo
+- main algo:
+- - main process starts threads
+- - each thread imitate a philosopher: eat, sleep, thinking
+- - main process monitors state and set a flag to stop simulation
+- verify one philo case
 - add a Makefile
+- add ft_atoi, remove atoi
 - fix the norm
 - verify with valgrind and static code analyzer
 - remove the tester

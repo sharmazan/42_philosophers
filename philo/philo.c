@@ -1,40 +1,4 @@
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/time.h>
-
-typedef struct s_config {
-    int philo_num;
-    long last_meal;
-    long time_to_die;
-    long time_to_eat;
-    long time_to_sleep;
-    int must_eat_count;
-} t_config;
-
-typedef struct s_sim t_sim;
-
-typedef struct s_philo  {
-    int id;
-    pthread_t thread;
-    pthread_mutex_t *left_fork;
-    pthread_mutex_t *right_fork;
-    int meals_eaten;
-    pthread_mutex_t *meals_mutex;
-
-    t_sim *sim;
-} t_philo;
-
-typedef struct s_sim {
-    t_config config;
-    t_philo *philos;
-    pthread_mutex_t *forks;
-    pthread_mutex_t print_mutex;
-    pthread_mutex_t stop_mutex;
-    long start_time;
-    int should_stop;
-} t_sim;
+#include "philo.h"
 
 void print_err(char *s) {
     while (s && *s)
@@ -67,7 +31,8 @@ void *worker(void *arg) {
 
     philo = (t_philo *)arg;
     while (1) {
-        printf("%d eating\n", philo->id);
+        philo->last_meal_time = get_time_ms();
+        log_with_timestamp(philo->sim, philo->id, "is eating");
         usleep(philo->sim->config.time_to_eat * 1000L);
         philo->meals_eaten++;
         log_with_timestamp(philo->sim, philo->id, "is sleeping");
@@ -75,10 +40,6 @@ void *worker(void *arg) {
         log_with_timestamp(philo->sim, philo->id, "is thinking");
         // usleep(philo->sim->config.time_to_think * 1000L);
         usleep(1000);
-        if (philo->sim->config.must_eat_count && philo->meals_eaten == philo->sim->config.must_eat_count) {
-            printf("thread %d finished\n", philo->id);
-            return NULL;
-        }
     }
 }
 
@@ -98,6 +59,7 @@ void cleanup(t_sim sim) {
 int main(int ac, char **av) {
     t_sim sim;
     int i;
+    static int stop;
 
     if (ac < 5 || ac > 6) {
         print_err("Wrong arguments. Use it with:\n./philo number_of_philosophers time_to_die time_to_eat time_to_sleep [number_of_times_each_philosopher_must_eat]");
@@ -120,20 +82,54 @@ int main(int ac, char **av) {
     sim.should_stop = 0;
     malloc_philo_and_forks(&sim);
     printf("Program started\n");
+    // finish setup
+
+    // start threads
     i = 0;
     while (i < sim.config.philo_num) {
         sim.philos[i].id = i;
         sim.philos[i].meals_eaten = 0;
+        sim.philos[i].last_meal_time = sim.start_time;
         sim.philos[i].sim = &sim;
         pthread_create(&sim.philos[i].thread, NULL, worker, &sim.philos[i]);
         i++;
     }
 
-    i = 0;
-    while (i < sim.config.philo_num) {
-        pthread_join(sim.philos[i].thread, NULL);
-        i++;
+    // i = 0;
+    // while (i < sim.config.philo_num) {
+    //     pthread_join(sim.philos[i].thread, NULL);
+    //     i++;
+    // }
+
+    while (!sim.should_stop) {
+        // do all philosophers eat enough?
+        if (sim.config.must_eat_count) {
+            stop = 1;
+            i = 0;
+            while (stop && i < sim.config.philo_num) {
+                // log_with_timestamp(&sim, i, "ENOUGH?");
+                stop = sim.philos[i].meals_eaten >= sim.config.must_eat_count;
+                // if (stop)
+                //     log_with_timestamp(&sim, i, "YES!");
+                i++;
+            }
+            sim.should_stop = stop;
+        }
+
+        if (!sim.should_stop) {
+            i = 0;
+            // verify if philo X should die
+            while (!sim.should_stop && i < sim.config.philo_num) {
+                if (get_time_ms() - sim.philos[i].last_meal_time > sim.config.time_to_die) {
+                    sim.should_stop = 1;
+                    log_with_timestamp(&sim, i, "died");
+                }
+                i++;
+            }
+        }
     }
+
+    // cleanup
     cleanup(sim);
     printf("Program finished\n");
     return 0;
