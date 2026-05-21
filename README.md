@@ -5,9 +5,20 @@ TODO
 - negative or wrong arguments
 - implement data structures
 - main algo:
-- - main process starts threads
-- - each thread imitate a philosopher: eat, sleep, thinking
-- - main process monitors state and set a flag to stop simulation
+- + main process starts threads
+- + each thread imitate a philosopher: eat, sleep, thinking
+- + main process monitors state and set a flag to stop simulation if meal time passed. 
+- - add `should_stop` mutex
+- worker algo
+- - verify `should_stop` before each move
+- - use `should_stop` mutex for the verifications
+- + take left fork
+- + take right fork
+- + print and eat
+- - use mutex for printing
+- + print and sleep
+- + print thinking
+- + repeat
 - verify one philo case
 - add a Makefile
 - add ft_atoi, remove atoi
