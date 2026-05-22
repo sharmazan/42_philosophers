@@ -240,7 +240,7 @@ int main(int ac, char **av) {
     //     i++;
     // }
 
-    while (!sim.should_stop) {
+    while (!get_should_stop(&sim)) {
         // do all philosophers eat enough?
         if (sim.config.must_eat_count) {
             stop = 1;
@@ -266,9 +266,10 @@ int main(int ac, char **av) {
                 }
                 i++;
             }
-        }
-    }
 
+        }
+        usleep(500);
+    }
 
     i = 0;
     while (i < sim.config.philo_num)
