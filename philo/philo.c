@@ -215,12 +215,10 @@ int main(int ac, char **av) {
     // start threads
     i = 0;
     while (i < sim.config.philo_num) {
-        sim.philos[i].id = i;
+        sim.philos[i].id = i + 1;
         sim.philos[i].meals_eaten = 0;
         sim.philos[i].last_meal_time = sim.start_time;
         sim.philos[i].sim = &sim;
-        // printf("Left fork id: %d\n", i);
-        // printf("Right fork id: %d\n", (i+1) % sim.config.philo_num);
         if (i % 2) {
             sim.philos[i].left_fork = &sim.forks[i];
             sim.philos[i].right_fork = &sim.forks[(i+1) % sim.config.philo_num];
@@ -234,22 +232,13 @@ int main(int ac, char **av) {
         i++;
     }
 
-    // i = 0;
-    // while (i < sim.config.philo_num) {
-    //     pthread_join(sim.philos[i].thread, NULL);
-    //     i++;
-    // }
-
     while (!get_should_stop(&sim)) {
         // do all philosophers eat enough?
         if (sim.config.must_eat_count) {
             stop = 1;
             i = 0;
             while (stop && i < sim.config.philo_num) {
-                // log_with_timestamp(&sim, i, "ENOUGH?");
                 stop = sim.philos[i].meals_eaten >= sim.config.must_eat_count;
-                // if (stop)
-                //     log_with_timestamp(&sim, i, "YES!");
                 i++;
             }
             if (stop)
