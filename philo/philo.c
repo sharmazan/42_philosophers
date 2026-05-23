@@ -83,6 +83,26 @@ void set_should_stop(t_sim *sim) {
     pthread_mutex_unlock(&sim->stop_mutex);
 }
 
+void precise_sleep(t_sim *sim, long duration_ms) {
+    long end_time;
+
+    end_time = get_time_ms() + duration_ms;
+    while (!get_should_stop(sim) && get_time_ms() < end_time)
+        usleep(500);
+}
+
+void wait_after_thinking(t_philo *philo) {
+    long delay;
+
+    if (philo->sim->config.philo_num % 2 == 0)
+        return ;
+    delay = philo->sim->config.time_to_eat * 2
+        - philo->sim->config.time_to_sleep;
+    if (delay < 1)
+        delay = 1;
+    precise_sleep(philo->sim, delay);
+}
+
 void *worker(void *arg) {
     t_philo *philo;
 
@@ -119,19 +139,24 @@ void *worker(void *arg) {
             pthread_mutex_unlock(philo->second_fork);
             break ;
         }
+        pthread_mutex_lock(&philo->meal_mutex);
         philo->last_meal_time = get_time_ms();
+        pthread_mutex_unlock(&philo->meal_mutex);
         print_action(philo->sim, philo->id, "is eating");
-        usleep(philo->sim->config.time_to_eat * 1000L);
+        precise_sleep(philo->sim, philo->sim->config.time_to_eat);
         pthread_mutex_unlock(philo->first_fork);
         pthread_mutex_unlock(philo->second_fork);
+        pthread_mutex_lock(&philo->meal_mutex);
         philo->meals_eaten++;
+        pthread_mutex_unlock(&philo->meal_mutex);
         if (get_should_stop(philo->sim))
             break ;
         print_action(philo->sim, philo->id, "is sleeping");
-        usleep(philo->sim->config.time_to_sleep * 1000L);
+        precise_sleep(philo->sim, philo->sim->config.time_to_sleep);
         if (get_should_stop(philo->sim))
             break ;
         print_action(philo->sim, philo->id, "is thinking");
+        wait_after_thinking(philo);
     }
     return NULL;
 }
@@ -158,8 +183,11 @@ void cleanup(t_sim *sim) {
     pthread_mutex_destroy(&sim->print_mutex);
     pthread_mutex_destroy(&sim->stop_mutex);
     i = 0;
-    while (i < sim->config.philo_num)
-        pthread_mutex_destroy(&sim->forks[i++]);
+    while (i < sim->config.philo_num) {
+        pthread_mutex_destroy(&sim->forks[i]);
+        pthread_mutex_destroy(&sim->philos[i].meal_mutex);
+        i++;
+    }
     free(sim->philos);
     free(sim->forks);
 }
@@ -174,6 +202,25 @@ int is_args_positiv_int(int ac, char **av) {
         i++;
     }
     return 1;
+}
+
+int get_philo_meals_eaten(t_philo *philo) {
+    int value;
+
+    pthread_mutex_lock(&philo->meal_mutex);
+    value = philo->meals_eaten;
+    pthread_mutex_unlock(&philo->meal_mutex);
+    return value;
+}
+
+
+long get_philo_last_meal_time(t_philo *philo) {
+    long value;
+
+    pthread_mutex_lock(&philo->meal_mutex);
+    value = philo->last_meal_time;
+    pthread_mutex_unlock(&philo->meal_mutex);
+    return value;
 }
 
 int main(int ac, char **av) {
@@ -219,6 +266,7 @@ int main(int ac, char **av) {
         sim.philos[i].meals_eaten = 0;
         sim.philos[i].last_meal_time = sim.start_time;
         sim.philos[i].sim = &sim;
+        pthread_mutex_init(&sim.philos[i].meal_mutex, NULL);
         if (i % 2) {
             sim.philos[i].first_fork = &sim.forks[i];
             sim.philos[i].second_fork = &sim.forks[(i+1) % sim.config.philo_num];
@@ -238,7 +286,7 @@ int main(int ac, char **av) {
             stop = 1;
             i = 0;
             while (stop && i < sim.config.philo_num) {
-                stop = sim.philos[i].meals_eaten >= sim.config.must_eat_count;
+                stop = get_philo_meals_eaten(&sim.philos[i]) >= sim.config.must_eat_count;
                 i++;
             }
             if (stop)
@@ -249,7 +297,7 @@ int main(int ac, char **av) {
             i = 0;
             // verify if philo X should die
             while (!get_should_stop(&sim) && i < sim.config.philo_num) {
-                if (get_time_ms() - sim.philos[i].last_meal_time > sim.config.time_to_die) {
+                if (get_time_ms() - get_philo_last_meal_time(&sim.philos[i]) > sim.config.time_to_die) {
                     set_should_stop(&sim);
                     log_with_timestamp(&sim, sim.philos[i].id, "died");
                 }
