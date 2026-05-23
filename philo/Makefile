@@ -4,7 +4,8 @@ CC			= cc
 CFLAGS		= -Wall -Wextra -Werror
 RM			= rm -f
 
-SRCS		= philo.c
+SRCS		= philo.c utils.c parsing.c state.c logging.c sim.c worker.c \
+			  threads.c monitor.c
 OBJS		= $(SRCS:.c=.o)
 
 all: $(NAME)

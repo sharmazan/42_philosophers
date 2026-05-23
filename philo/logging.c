@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   philo.c                                            :+:      :+:    :+:   */
+/*   logging.c                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: ssharmaz <ssharmaz@student.42vienna.com    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
@@ -12,21 +12,38 @@
 
 #include "philo.h"
 
-int	main(int ac, char **av)
+void	log_with_timestamp(t_sim *sim, int id, char *s)
 {
-	t_sim	sim;
+	long	now;
 
-	if (!parse_args(&sim, ac, av))
-		return (1);
-	if (!init(&sim))
-		return (1);
-	if (!start_threads(&sim))
+	pthread_mutex_lock(&sim->print_mutex);
+	now = get_time_ms();
+	printf("%ld %d %s\n", now - sim->start_time, id, s);
+	pthread_mutex_unlock(&sim->print_mutex);
+}
+
+void	print_action(t_sim *sim, int id, char *s)
+{
+	long	now;
+
+	pthread_mutex_lock(&sim->print_mutex);
+	if (!get_should_stop(sim))
 	{
-		cleanup(&sim);
-		return (1);
+		now = get_time_ms();
+		printf("%ld %d %s\n", now - sim->start_time, id, s);
 	}
-	monitor(&sim);
-	join_philos(&sim);
-	cleanup(&sim);
-	return (0);
+	pthread_mutex_unlock(&sim->print_mutex);
+}
+
+void	wait_after_thinking(t_philo *philo)
+{
+	long	delay;
+
+	if (philo->sim->config.philo_num % 2 == 0)
+		return ;
+	delay = philo->sim->config.time_to_eat * 2;
+	delay = delay - philo->sim->config.time_to_sleep;
+	if (delay < 1)
+		delay = 1;
+	precise_sleep(philo->sim, delay);
 }

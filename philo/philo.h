@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   philo.h                                            :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ssharmaz <ssharmaz@student.42vienna.com    +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/03/12 10:42:00 by ssharmaz          #+#    #+#             */
+/*   Updated: 2026/03/29 18:19:34 by ssharmaz         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #ifndef PHILO_H
 # define PHILO_H
 
@@ -42,21 +54,25 @@ struct s_sim
 };
 
 void	print_err(char *s);
-void	print_string(char *s);
 int		ft_atoi(const char *nptr);
 long	get_time_ms(void);
-int		get_should_stop(t_sim *sim);
-void	log_with_timestamp(t_sim *sim, int id, char *s);
-void	print_action(t_sim *sim, int id, char *s);
-void	set_should_stop(t_sim *sim);
-void	precise_sleep(t_sim *sim, long duration_ms);
-void	wait_after_thinking(t_philo *philo);
-void	*worker(void *arg);
-void	malloc_philo_and_forks(t_sim *sim);
-void	init(t_sim *sim);
-void	cleanup(t_sim *sim);
+int		parse_args(t_sim *sim, int ac, char **av);
 int		is_args_positiv_int(int ac, char **av);
+int		init(t_sim *sim);
+void	init_philos(t_sim *sim);
+int		malloc_philo_and_forks(t_sim *sim);
+void	cleanup(t_sim *sim);
+int		start_threads(t_sim *sim);
+void	join_philos(t_sim *sim);
+void	*worker(void *arg);
+void	monitor(t_sim *sim);
+int		get_should_stop(t_sim *sim);
+void	set_should_stop(t_sim *sim);
 int		get_philo_meals_eaten(t_philo *philo);
 long	get_philo_last_meal_time(t_philo *philo);
+void	precise_sleep(t_sim *sim, long duration_ms);
+void	log_with_timestamp(t_sim *sim, int id, char *s);
+void	print_action(t_sim *sim, int id, char *s);
+void	wait_after_thinking(t_philo *philo);
 
 #endif

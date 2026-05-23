@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   philo.c                                            :+:      :+:    :+:   */
+/*   utils.c                                            :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: ssharmaz <ssharmaz@student.42vienna.com    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
@@ -12,21 +12,42 @@
 
 #include "philo.h"
 
-int	main(int ac, char **av)
+void	print_err(char *s)
 {
-	t_sim	sim;
+	while (s && *s)
+		write(2, s++, 1);
+	write(2, "\n", 1);
+}
 
-	if (!parse_args(&sim, ac, av))
-		return (1);
-	if (!init(&sim))
-		return (1);
-	if (!start_threads(&sim))
+long	get_time_ms(void)
+{
+	struct timeval	tv;
+
+	gettimeofday(&tv, NULL);
+	return ((tv.tv_sec * 1000L) + (tv.tv_usec / 1000L));
+}
+
+int	ft_atoi(const char *nptr)
+{
+	long	i;
+	int		digit;
+
+	i = 0;
+	if (!nptr || !*nptr)
+		return (-1);
+	if (*nptr == '+')
+		nptr++;
+	if (!*nptr || *nptr == '-')
+		return (-1);
+	while (*nptr == '0')
+		nptr++;
+	while (*nptr >= '0' && *nptr <= '9')
 	{
-		cleanup(&sim);
-		return (1);
+		digit = *nptr - '0';
+		i = i * 10 + digit;
+		nptr++;
 	}
-	monitor(&sim);
-	join_philos(&sim);
-	cleanup(&sim);
-	return (0);
+	if (*nptr || i > 2147483647)
+		return (-1);
+	return (i);
 }

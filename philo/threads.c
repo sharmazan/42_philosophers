@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   philo.c                                            :+:      :+:    :+:   */
+/*   threads.c                                          :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: ssharmaz <ssharmaz@student.42vienna.com    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
@@ -12,21 +12,32 @@
 
 #include "philo.h"
 
-int	main(int ac, char **av)
+int	start_threads(t_sim *sim)
 {
-	t_sim	sim;
+	int	i;
 
-	if (!parse_args(&sim, ac, av))
-		return (1);
-	if (!init(&sim))
-		return (1);
-	if (!start_threads(&sim))
+	i = 0;
+	while (i < sim->config.philo_num)
 	{
-		cleanup(&sim);
-		return (1);
+		if (pthread_create(&sim->philos[i].thread, NULL,
+				worker, &sim->philos[i]) != 0)
+		{
+			set_should_stop(sim);
+			return (0);
+		}
+		i++;
 	}
-	monitor(&sim);
-	join_philos(&sim);
-	cleanup(&sim);
-	return (0);
+	return (1);
+}
+
+void	join_philos(t_sim *sim)
+{
+	int	i;
+
+	i = 0;
+	while (i < sim->config.philo_num)
+	{
+		pthread_join(sim->philos[i].thread, NULL);
+		i++;
+	}
 }
