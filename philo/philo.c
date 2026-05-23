@@ -89,41 +89,41 @@ void *worker(void *arg) {
     philo = (t_philo *)arg;
     if (philo->sim->config.philo_num == 1)
     {
-        pthread_mutex_lock(philo->left_fork);
+        pthread_mutex_lock(philo->first_fork);
         print_action(philo->sim, philo->id, "has taken a fork");
         while (!get_should_stop(philo->sim))
             usleep(1000);
-        pthread_mutex_unlock(philo->left_fork);
+        pthread_mutex_unlock(philo->first_fork);
         return NULL;
     }
     while (!get_should_stop(philo->sim)) {
         // take_fork
-        pthread_mutex_lock(philo->left_fork);
+        pthread_mutex_lock(philo->first_fork);
         if (get_should_stop(philo->sim))
         {
-            pthread_mutex_unlock(philo->left_fork);
+            pthread_mutex_unlock(philo->first_fork);
             break;
         }
         print_action(philo->sim, philo->id, "has taken a fork");
-        pthread_mutex_lock(philo->right_fork);
+        pthread_mutex_lock(philo->second_fork);
         if (get_should_stop(philo->sim))
         {
-            pthread_mutex_unlock(philo->right_fork);
-            pthread_mutex_unlock(philo->left_fork);
+            pthread_mutex_unlock(philo->second_fork);
+            pthread_mutex_unlock(philo->first_fork);
             break;
         }
         print_action(philo->sim, philo->id, "has taken a fork");
         if (get_should_stop(philo->sim))
         {
-            pthread_mutex_unlock(philo->left_fork);
-            pthread_mutex_unlock(philo->right_fork);
+            pthread_mutex_unlock(philo->first_fork);
+            pthread_mutex_unlock(philo->second_fork);
             break ;
         }
         philo->last_meal_time = get_time_ms();
         print_action(philo->sim, philo->id, "is eating");
         usleep(philo->sim->config.time_to_eat * 1000L);
-        pthread_mutex_unlock(philo->left_fork);
-        pthread_mutex_unlock(philo->right_fork);
+        pthread_mutex_unlock(philo->first_fork);
+        pthread_mutex_unlock(philo->second_fork);
         philo->meals_eaten++;
         if (get_should_stop(philo->sim))
             break ;
@@ -192,7 +192,7 @@ int main(int ac, char **av) {
     }
 
     if (ft_atoi(av[1]) > 1000) {
-        print_err("Max 1000 philosophers");
+        print_err("Invalid number or philosophers. Maximum supported amount is 1000");
         return 1;
     }
 
@@ -220,12 +220,12 @@ int main(int ac, char **av) {
         sim.philos[i].last_meal_time = sim.start_time;
         sim.philos[i].sim = &sim;
         if (i % 2) {
-            sim.philos[i].left_fork = &sim.forks[i];
-            sim.philos[i].right_fork = &sim.forks[(i+1) % sim.config.philo_num];
+            sim.philos[i].first_fork = &sim.forks[i];
+            sim.philos[i].second_fork = &sim.forks[(i+1) % sim.config.philo_num];
         }
         else {
-            sim.philos[i].left_fork = &sim.forks[(i+1) % sim.config.philo_num];
-            sim.philos[i].right_fork = &sim.forks[i];
+            sim.philos[i].first_fork = &sim.forks[(i+1) % sim.config.philo_num];
+            sim.philos[i].second_fork = &sim.forks[i];
         }
 
         pthread_create(&sim.philos[i].thread, NULL, worker, &sim.philos[i]);
@@ -251,7 +251,7 @@ int main(int ac, char **av) {
             while (!get_should_stop(&sim) && i < sim.config.philo_num) {
                 if (get_time_ms() - sim.philos[i].last_meal_time > sim.config.time_to_die) {
                     set_should_stop(&sim);
-                    log_with_timestamp(&sim, i, "died");
+                    log_with_timestamp(&sim, sim.philos[i].id, "died");
                 }
                 i++;
             }
