@@ -1,31 +1,5 @@
 # _This project has been created as part of the 42 curriculum by ssharmaz._
 
-TODO
-- arg verification
-- negative or wrong arguments
-- implement data structures
-- main algo:
-- + main process starts threads
-- + each thread imitate a philosopher: eat, sleep, thinking
-- + main process monitors state and set a flag to stop simulation if meal time passed. 
-- - add `should_stop` mutex
-- worker algo
-- - verify `should_stop` before each move
-- - use `should_stop` mutex for the verifications
-- + take left fork
-- + take right fork
-- + print and eat
-- - use mutex for printing
-- + print and sleep
-- + print thinking
-- + repeat
-- verify one philo case
-- add a Makefile
-- add ft_atoi, remove atoi
-- fix the norm
-- verify with valgrind and static code analyzer
-- remove the tester
-
 ## Description
 The goal of this project is to learn the basics of threading a process, how to create threads and explore the use of mutexes.
 
@@ -108,7 +82,7 @@ make
 
 ## Resources
 man and ChatGPT to read about the functions to work with threads. 
-AI was used to create a test suite, but not for the project's code itself. 
+AI was used to create a test suite and fix norminette errors. 
 
 ### Notes
 ```
@@ -142,6 +116,7 @@ pthread_mutex_destroy(&counter_lock);
 ## How to test
 
 ```
+git checkout test
 chmod +x tests/test_philo.sh
 ./tests/test_philo.sh ./philo/philo
 ```

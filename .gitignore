@@ -1,2 +1,3 @@
 philo_test_logs/
 philo/philo
+philo/*.o
